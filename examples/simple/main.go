@@ -35,8 +35,12 @@ func main() {
 
 	// Start go func to send data into pipeline and then shutdown
 	go func() {
-		defer p.Shutdown()
-		for i := 1; i <= 10; i++ {
+		defer func() {
+			if err := p.Shutdown(); err != nil {
+				panic(err)
+			}
+		}()
+		for i := 1; i <= 5; i++ {
 			if err := p.Submit(i); err != nil {
 				panic(err)
 			}

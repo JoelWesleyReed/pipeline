@@ -2,20 +2,12 @@ package pipeline
 
 import (
 	"context"
-	"errors"
-	"sync"
 
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 type pipelineState uint8
-
-const (
-	unititialized = iota
-	running
-	draining
-)
 
 const (
 	chanSize = 10
@@ -37,13 +29,11 @@ type Pipeline struct {
 	srcChan chan interface{}
 	process []process
 	sink    sink
-	sync.Mutex
-	logger *zap.Logger
+	logger  *zap.Logger
 }
 
 func NewPipeline(logger *zap.Logger) *Pipeline {
 	return &Pipeline{
-		state:   unititialized,
 		srcChan: make(chan interface{}, chanSize),
 		process: make([]process, 0),
 		logger:  logger,
@@ -51,9 +41,6 @@ func NewPipeline(logger *zap.Logger) *Pipeline {
 }
 
 func (p *Pipeline) Add(proc process) error {
-	if p.state != unititialized {
-		return errors.New("cannot add process to running or draining pipeline")
-	}
 	dstChan := make(chan interface{}, chanSize)
 	srcChan := p.srcChan
 	if l := len(p.process); l > 0 {
@@ -65,12 +52,6 @@ func (p *Pipeline) Add(proc process) error {
 }
 
 func (p *Pipeline) Run(ctx context.Context, s sink) error {
-	p.Lock()
-	if p.state != unititialized {
-		p.Unlock()
-		return errors.New("cannot run a running or draining pipeline")
-	}
-	p.Unlock()
 	dstChan := p.srcChan
 	if len(p.process) > 0 {
 		dstChan = p.process[len(p.process)-1].getDstChan()
@@ -96,9 +77,6 @@ func (p *Pipeline) Run(ctx context.Context, s sink) error {
 		}
 		return nil
 	})
-	p.Lock()
-	p.state = running
-	p.Unlock()
 	if err := g.Wait(); err != nil {
 		return err
 	}
@@ -106,23 +84,11 @@ func (p *Pipeline) Run(ctx context.Context, s sink) error {
 }
 
 func (p *Pipeline) Submit(item interface{}) error {
-	p.Lock()
-	if p.state == draining {
-		p.Unlock()
-		return errors.New("cannot submit when pipeline is draining")
-	}
-	p.Unlock()
 	p.srcChan <- item
 	return nil
 }
 
 func (p *Pipeline) Shutdown() error {
-	p.Lock()
-	defer p.Unlock()
-	if p.state != running {
-		return errors.New("can only shutdown a running pipeline")
-	}
-	p.state = draining
 	close(p.srcChan)
 	p.logger.Debug("pipeline draining for shutdown")
 	return nil
