@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -12,6 +13,7 @@ type processSingle struct {
 	worker  ProcessWorker
 	srcChan chan interface{}
 	dstChan chan interface{}
+	s       *stats
 	logger  *zap.Logger
 }
 
@@ -19,6 +21,7 @@ func NewProcessSingle(id string, worker ProcessWorker) process {
 	return &processSingle{
 		id:     id,
 		worker: worker,
+		s:      newStats(false),
 	}
 }
 
@@ -44,12 +47,18 @@ func (p *processSingle) run(ctx context.Context) error {
 			if !open {
 				return nil
 			}
+			startTime := time.Now()
 			err := p.worker.Process(ctx, p.id, item, func(item interface{}) { p.emit(ctx, item) })
 			if err != nil {
 				return fmt.Errorf("process '%s' error: %v", p.id, err)
 			}
+			p.s.recordDuration(time.Now().Sub(startTime))
 		}
 	}
+}
+
+func (p *processSingle) stats() string {
+	return fmt.Sprintf("%s:%s", p.id, p.s.String())
 }
 
 func (p *processSingle) emit(ctx context.Context, item interface{}) {

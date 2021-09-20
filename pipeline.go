@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"strings"
 
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -17,15 +18,16 @@ type process interface {
 	setup(srcChan, dstChan chan interface{}, logger *zap.Logger)
 	getDstChan() chan interface{}
 	run(context.Context) error
+	stats() string
 }
 
 type sink interface {
 	setup(srcChan chan interface{}, logger *zap.Logger)
 	run(context.Context) error
+	stats() string
 }
 
 type Pipeline struct {
-	state   pipelineState
 	srcChan chan interface{}
 	process []process
 	sink    sink
@@ -86,6 +88,16 @@ func (p *Pipeline) Run(ctx context.Context, s sink) error {
 func (p *Pipeline) Submit(item interface{}) error {
 	p.srcChan <- item
 	return nil
+}
+
+func (p *Pipeline) Stats() string {
+	var buf strings.Builder
+	for _, p := range p.process {
+		buf.WriteString(p.stats())
+		buf.WriteString("  ")
+	}
+	buf.WriteString(p.sink.stats())
+	return buf.String()
 }
 
 func (p *Pipeline) Shutdown() error {

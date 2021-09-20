@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -11,6 +12,7 @@ type sinkSingle struct {
 	id      string
 	sink    SinkWorker
 	srcChan chan interface{}
+	s       *stats
 	logger  *zap.Logger
 }
 
@@ -18,6 +20,7 @@ func NewSinkSingle(id string, worker SinkWorker) sink {
 	return &sinkSingle{
 		id:   id,
 		sink: worker,
+		s:    newStats(false),
 	}
 }
 
@@ -37,10 +40,16 @@ func (s *sinkSingle) run(ctx context.Context) error {
 			if !open {
 				return nil
 			}
+			startTime := time.Now()
 			err := s.sink.Sink(ctx, s.id, item)
 			if err != nil {
 				return fmt.Errorf("sink '%s' error: %v", s.id, err)
 			}
+			s.s.recordDuration(time.Now().Sub(startTime))
 		}
 	}
+}
+
+func (s *sinkSingle) stats() string {
+	return fmt.Sprintf("%s:%s", s.id, s.s.String())
 }

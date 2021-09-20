@@ -57,4 +57,6 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
+
+	fmt.Printf("Stats: %s\n", p.Stats())
 }

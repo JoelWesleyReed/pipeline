@@ -32,10 +32,11 @@ type processAdaptive struct {
 	worker         ProcessWorker
 	srcChan        chan interface{}
 	dstChan        chan interface{}
-	stats          movavg.MA
+	ma             movavg.MA
 	g              *errgroup.Group
 	doneChan       []chan bool
 	config         *ProcessAdaptiveConfig
+	s              *stats
 	sync.Mutex
 	logger *zap.Logger
 }
@@ -58,6 +59,7 @@ func NewProcessAdaptive(id string, minThreads, maxThreads int, config *ProcessAd
 		worker:         worker,
 		doneChan:       make([]chan bool, 0),
 		config:         config,
+		s:              newStats(true),
 	}, nil
 }
 
@@ -73,7 +75,7 @@ func (p *processAdaptive) getDstChan() chan interface{} {
 
 func (p *processAdaptive) run(ctx context.Context) error {
 	defer close(p.dstChan)
-	p.stats = movavg.ThreadSafe(movavg.NewSMA(p.config.StatsWindow))
+	p.ma = movavg.ThreadSafe(movavg.NewSMA(p.config.StatsWindow))
 	var gctx context.Context
 	p.g, gctx = errgroup.WithContext(ctx)
 	p.startStatsTicker(gctx)
@@ -104,14 +106,20 @@ func (p *processAdaptive) scaleUp(ctx context.Context) {
 				if !open {
 					return nil
 				}
+				startTime := time.Now()
 				err := p.worker.Process(ctx, tid, item, func(item interface{}) { p.emit(ctx, item) })
 				if err != nil {
 					return fmt.Errorf("process '%s' error: %v", tid, err)
 				}
+				p.s.recordDuration(time.Now().Sub(startTime))
 			}
 		}
 	})
 	p.doneChan = append(p.doneChan, doneChan)
+}
+
+func (p *processAdaptive) stats() string {
+	return fmt.Sprintf("%s:%s", p.id, p.s.String())
 }
 
 func (p *processAdaptive) emit(ctx context.Context, item interface{}) {
@@ -140,7 +148,7 @@ func (p *processAdaptive) startStatsTicker(ctx context.Context) {
 				return
 			case <-ticker.C:
 				p.Lock()
-				p.stats.Add(float64(len(p.srcChan) - len(p.dstChan)))
+				p.ma.Add(float64(len(p.srcChan) - len(p.dstChan)))
 				p.Unlock()
 			}
 		}
@@ -157,7 +165,7 @@ func (p *processAdaptive) startScaleTicker(ctx context.Context) {
 				p.logger.Debug("process adaptive scale ticker shutting down", zap.String("id", p.id))
 				return
 			case <-ticker.C:
-				avg := p.stats.Avg()
+				avg := p.ma.Avg()
 				p.Lock()
 				if avg > float64(chanSize)/2.0 && len(p.doneChan) < p.maxThreads {
 					p.logger.Debug("scaling up", zap.String("id", p.id), zap.Int("threads", len(p.doneChan)+1))
