@@ -28,7 +28,7 @@ func main() {
 	// Set up process 2
 	p2, err := pipeline.NewProcessConcurrent("process2", 2, pipeline.NewSimpleProcessWorker(
 		func(ctx context.Context, id string, item interface{}, emit func(interface{})) error {
-			time.Sleep(2 * time.Second)
+			time.Sleep(1 * time.Second)
 			emit(item)
 			return nil
 		}))
@@ -36,6 +36,17 @@ func main() {
 		panic(err)
 	}
 	p.Add(p2)
+
+	// Set up process 3
+	p3, err := pipeline.NewProcessAdaptive("process3", 2, 4, nil, pipeline.NewSimpleProcessWorker(
+		func(ctx context.Context, id string, item interface{}, emit func(interface{})) error {
+			emit(item)
+			return nil
+		}))
+	if err != nil {
+		panic(err)
+	}
+	p.Add(p3)
 
 	// Start go func to send data into pipeline and then shutdown
 	go func() {

@@ -11,7 +11,7 @@ import (
 type pipelineState uint8
 
 const (
-	chanSize = 10
+	chanSize = 0
 )
 
 type process interface {

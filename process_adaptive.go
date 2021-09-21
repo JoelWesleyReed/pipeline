@@ -12,6 +12,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	bufChanSize = 10
+)
+
 type ProcessAdaptiveConfig struct {
 	StatsInterval time.Duration
 	StatsWindow   int
@@ -31,7 +35,9 @@ type processAdaptive struct {
 	currentThreads int
 	worker         ProcessWorker
 	srcChan        chan interface{}
+	srcBufChan     chan interface{}
 	dstChan        chan interface{}
+	dstBufChan     chan interface{}
 	ma             movavg.MA
 	g              *errgroup.Group
 	doneChan       []chan bool
@@ -57,6 +63,8 @@ func NewProcessAdaptive(id string, minThreads, maxThreads int, config *ProcessAd
 		maxThreads:     maxThreads,
 		currentThreads: minThreads,
 		worker:         worker,
+		srcBufChan:     make(chan interface{}, bufChanSize),
+		dstBufChan:     make(chan interface{}, bufChanSize),
 		doneChan:       make([]chan bool, 0),
 		config:         config,
 		s:              newStats(true),
@@ -74,7 +82,9 @@ func (p *processAdaptive) getDstChan() chan interface{} {
 }
 
 func (p *processAdaptive) run(ctx context.Context) error {
-	defer close(p.dstChan)
+	p.startSrcBuffer(ctx)
+	p.startDstBuffer(ctx)
+	defer close(p.dstBufChan)
 	p.ma = movavg.ThreadSafe(movavg.NewSMA(p.config.StatsWindow))
 	var gctx context.Context
 	p.g, gctx = errgroup.WithContext(ctx)
@@ -86,6 +96,52 @@ func (p *processAdaptive) run(ctx context.Context) error {
 	}
 	p.Unlock()
 	return p.g.Wait()
+}
+
+func (p *processAdaptive) startSrcBuffer(ctx context.Context) {
+	go func() {
+		p.logger.Debug("source buffer starting", zap.String("id", p.id))
+		defer p.logger.Debug("source buffer exiting", zap.String("id", p.id))
+		defer close(p.srcBufChan)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case item, open := <-p.srcChan:
+				if !open {
+					return
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case p.srcBufChan <- item:
+				}
+			}
+		}
+	}()
+}
+
+func (p *processAdaptive) startDstBuffer(ctx context.Context) {
+	go func() {
+		p.logger.Debug("destination buffer starting", zap.String("id", p.id))
+		defer p.logger.Debug("destination buffer exiting", zap.String("id", p.id))
+		defer close(p.dstChan)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case item, open := <-p.dstBufChan:
+				if !open {
+					return
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case p.dstChan <- item:
+				}
+			}
+		}
+	}()
 }
 
 func (p *processAdaptive) scaleUp(ctx context.Context) {
@@ -102,7 +158,7 @@ func (p *processAdaptive) scaleUp(ctx context.Context) {
 				return nil
 			case <-ctx.Done():
 				return nil
-			case item, open := <-p.srcChan:
+			case item, open := <-p.srcBufChan:
 				if !open {
 					return nil
 				}
@@ -126,7 +182,7 @@ func (p *processAdaptive) emit(ctx context.Context, item interface{}) {
 	select {
 	case <-ctx.Done():
 		break
-	case p.dstChan <- item:
+	case p.dstBufChan <- item:
 	}
 }
 
@@ -148,7 +204,7 @@ func (p *processAdaptive) startStatsTicker(ctx context.Context) {
 				return
 			case <-ticker.C:
 				p.Lock()
-				p.ma.Add(float64(len(p.srcChan) - len(p.dstChan)))
+				p.ma.Add(float64(len(p.srcBufChan) - len(p.dstBufChan)))
 				p.Unlock()
 			}
 		}
@@ -167,10 +223,10 @@ func (p *processAdaptive) startScaleTicker(ctx context.Context) {
 			case <-ticker.C:
 				avg := p.ma.Avg()
 				p.Lock()
-				if avg > float64(chanSize)/2.0 && len(p.doneChan) < p.maxThreads {
+				if avg > float64(bufChanSize)/2.0 && len(p.doneChan) < p.maxThreads {
 					p.logger.Debug("scaling up", zap.String("id", p.id), zap.Int("threads", len(p.doneChan)+1))
 					p.scaleUp(ctx)
-				} else if avg < float64(-chanSize)/2.0 && len(p.doneChan) > p.minThreads {
+				} else if avg < float64(-bufChanSize)/2.0 && len(p.doneChan) > p.minThreads {
 					p.logger.Debug("scaling down", zap.String("id", p.id), zap.Int("threads", len(p.doneChan)-1))
 					p.scaleDown()
 				}
