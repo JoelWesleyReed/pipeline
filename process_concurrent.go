@@ -16,7 +16,7 @@ type processConcurrent struct {
 	worker  ProcessWorker
 	srcChan chan interface{}
 	dstChan chan interface{}
-	s       *stats
+	m       *metrics
 	logger  *zap.Logger
 }
 
@@ -28,7 +28,7 @@ func NewProcessConcurrent(id string, threads int, worker ProcessWorker) (process
 		id:      id,
 		threads: threads,
 		worker:  worker,
-		s:       newStats(true),
+		m:       newMetrics(true),
 	}, nil
 }
 
@@ -63,7 +63,7 @@ func (p *processConcurrent) run(ctx context.Context) error {
 					if err != nil {
 						return fmt.Errorf("process '%s' error: %v", tid, err)
 					}
-					p.s.recordDuration(time.Now().Sub(startTime))
+					p.m.recordDuration(time.Now().Sub(startTime))
 				}
 			}
 		})
@@ -71,8 +71,8 @@ func (p *processConcurrent) run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (p *processConcurrent) stats() string {
-	return fmt.Sprintf("%s:%s", p.id, p.s.String())
+func (p *processConcurrent) metrics() string {
+	return fmt.Sprintf("%s:%s", p.id, p.m.String())
 }
 
 func (p *processConcurrent) emit(ctx context.Context, item interface{}) {

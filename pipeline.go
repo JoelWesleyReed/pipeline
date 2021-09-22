@@ -18,13 +18,13 @@ type process interface {
 	setup(srcChan, dstChan chan interface{}, logger *zap.Logger)
 	getDstChan() chan interface{}
 	run(context.Context) error
-	stats() string
+	metrics() string
 }
 
 type sink interface {
 	setup(srcChan chan interface{}, logger *zap.Logger)
 	run(context.Context) error
-	stats() string
+	metrics() string
 }
 
 type Pipeline struct {
@@ -90,13 +90,13 @@ func (p *Pipeline) Submit(item interface{}) error {
 	return nil
 }
 
-func (p *Pipeline) Stats() string {
+func (p *Pipeline) Metrics() string {
 	var buf strings.Builder
 	for _, p := range p.process {
-		buf.WriteString(p.stats())
+		buf.WriteString(p.metrics())
 		buf.WriteString("  ")
 	}
-	buf.WriteString(p.sink.stats())
+	buf.WriteString(p.sink.metrics())
 	return buf.String()
 }
 

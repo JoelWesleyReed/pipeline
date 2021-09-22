@@ -15,7 +15,7 @@ type sinkConcurrent struct {
 	threads int
 	sink    SinkWorker
 	srcChan chan interface{}
-	s       *stats
+	m       *metrics
 	logger  *zap.Logger
 }
 
@@ -27,7 +27,7 @@ func NewSinkConcurrent(id string, threads int, worker SinkWorker) (sink, error) 
 		id:      id,
 		threads: threads,
 		sink:    worker,
-		s:       newStats(true),
+		m:       newMetrics(true),
 	}, nil
 }
 
@@ -56,7 +56,7 @@ func (s *sinkConcurrent) run(ctx context.Context) error {
 					if err != nil {
 						return fmt.Errorf("sink '%s' error: %v", tid, err)
 					}
-					s.s.recordDuration(time.Now().Sub(startTime))
+					s.m.recordDuration(time.Now().Sub(startTime))
 				}
 			}
 		})
@@ -64,6 +64,6 @@ func (s *sinkConcurrent) run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *sinkConcurrent) stats() string {
-	return fmt.Sprintf("%s:%s", s.id, s.s.String())
+func (s *sinkConcurrent) metrics() string {
+	return fmt.Sprintf("%s:%s", s.id, s.m.String())
 }

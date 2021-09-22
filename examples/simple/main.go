@@ -59,5 +59,5 @@ func main() {
 		fmt.Println(err)
 	}
 
-	fmt.Printf("Stats: %s\n", p.Stats())
+	fmt.Printf("Metrics: %s\n", p.Metrics())
 }

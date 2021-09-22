@@ -12,7 +12,7 @@ type sinkSingle struct {
 	id      string
 	sink    SinkWorker
 	srcChan chan interface{}
-	s       *stats
+	m       *metrics
 	logger  *zap.Logger
 }
 
@@ -20,7 +20,7 @@ func NewSinkSingle(id string, worker SinkWorker) sink {
 	return &sinkSingle{
 		id:   id,
 		sink: worker,
-		s:    newStats(false),
+		m:    newMetrics(false),
 	}
 }
 
@@ -45,11 +45,11 @@ func (s *sinkSingle) run(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("sink '%s' error: %v", s.id, err)
 			}
-			s.s.recordDuration(time.Now().Sub(startTime))
+			s.m.recordDuration(time.Now().Sub(startTime))
 		}
 	}
 }
 
-func (s *sinkSingle) stats() string {
-	return fmt.Sprintf("%s:%s", s.id, s.s.String())
+func (s *sinkSingle) metrics() string {
+	return fmt.Sprintf("%s:%s", s.id, s.m.String())
 }

@@ -17,15 +17,15 @@ const (
 )
 
 type ProcessAdaptiveConfig struct {
-	StatsInterval time.Duration
-	StatsWindow   int
-	ScaleInterval time.Duration
+	SamplingInterval time.Duration
+	SamplingWindow   int
+	ScaleInterval    time.Duration
 }
 
 var DefaultProcessAdaptiveConfig = &ProcessAdaptiveConfig{
-	StatsInterval: 5 * time.Second,
-	StatsWindow:   70,
-	ScaleInterval: 30 * time.Second,
+	SamplingInterval: 5 * time.Second,
+	SamplingWindow:   70,
+	ScaleInterval:    30 * time.Second,
 }
 
 type processAdaptive struct {
@@ -42,7 +42,7 @@ type processAdaptive struct {
 	g              *errgroup.Group
 	doneChan       []chan bool
 	config         *ProcessAdaptiveConfig
-	s              *stats
+	m              *metrics
 	sync.Mutex
 	logger *zap.Logger
 }
@@ -67,7 +67,7 @@ func NewProcessAdaptive(id string, minThreads, maxThreads int, config *ProcessAd
 		dstBufChan:     make(chan interface{}, bufChanSize),
 		doneChan:       make([]chan bool, 0),
 		config:         config,
-		s:              newStats(true),
+		m:              newMetrics(true),
 	}, nil
 }
 
@@ -85,10 +85,10 @@ func (p *processAdaptive) run(ctx context.Context) error {
 	p.startSrcBuffer(ctx)
 	p.startDstBuffer(ctx)
 	defer close(p.dstBufChan)
-	p.ma = movavg.ThreadSafe(movavg.NewSMA(p.config.StatsWindow))
+	p.ma = movavg.ThreadSafe(movavg.NewSMA(p.config.SamplingWindow))
 	var gctx context.Context
 	p.g, gctx = errgroup.WithContext(ctx)
-	p.startStatsTicker(gctx)
+	p.startSamplingTicker(gctx)
 	p.startScaleTicker(gctx)
 	p.Lock()
 	for i := 0; i < p.currentThreads; i++ {
@@ -167,15 +167,15 @@ func (p *processAdaptive) scaleUp(ctx context.Context) {
 				if err != nil {
 					return fmt.Errorf("process '%s' error: %v", tid, err)
 				}
-				p.s.recordDuration(time.Now().Sub(startTime))
+				p.m.recordDuration(time.Now().Sub(startTime))
 			}
 		}
 	})
 	p.doneChan = append(p.doneChan, doneChan)
 }
 
-func (p *processAdaptive) stats() string {
-	return fmt.Sprintf("%s:%s", p.id, p.s.String())
+func (p *processAdaptive) metrics() string {
+	return fmt.Sprintf("%s:%s", p.id, p.m.String())
 }
 
 func (p *processAdaptive) emit(ctx context.Context, item interface{}) {
@@ -193,14 +193,14 @@ func (p *processAdaptive) scaleDown() {
 	p.doneChan = p.doneChan[:idx]
 }
 
-func (p *processAdaptive) startStatsTicker(ctx context.Context) {
-	p.logger.Debug("process adaptive stats ticker starting", zap.String("id", p.id))
-	ticker := time.NewTicker(p.config.StatsInterval)
+func (p *processAdaptive) startSamplingTicker(ctx context.Context) {
+	p.logger.Debug("process adaptive sampling ticker starting", zap.String("id", p.id))
+	ticker := time.NewTicker(p.config.SamplingInterval)
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
-				p.logger.Debug("process adaptive stats ticker shutting down", zap.String("id", p.id))
+				p.logger.Debug("process adaptive sampling ticker shutting down", zap.String("id", p.id))
 				return
 			case <-ticker.C:
 				p.Lock()

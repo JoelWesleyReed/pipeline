@@ -13,7 +13,7 @@ type processSingle struct {
 	worker  ProcessWorker
 	srcChan chan interface{}
 	dstChan chan interface{}
-	s       *stats
+	m       *metrics
 	logger  *zap.Logger
 }
 
@@ -21,7 +21,7 @@ func NewProcessSingle(id string, worker ProcessWorker) process {
 	return &processSingle{
 		id:     id,
 		worker: worker,
-		s:      newStats(false),
+		m:      newMetrics(false),
 	}
 }
 
@@ -52,13 +52,13 @@ func (p *processSingle) run(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("process '%s' error: %v", p.id, err)
 			}
-			p.s.recordDuration(time.Now().Sub(startTime))
+			p.m.recordDuration(time.Now().Sub(startTime))
 		}
 	}
 }
 
-func (p *processSingle) stats() string {
-	return fmt.Sprintf("%s:%s", p.id, p.s.String())
+func (p *processSingle) metrics() string {
+	return fmt.Sprintf("%s:%s", p.id, p.m.String())
 }
 
 func (p *processSingle) emit(ctx context.Context, item interface{}) {

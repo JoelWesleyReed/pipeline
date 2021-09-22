@@ -29,9 +29,9 @@ func main() {
 
 	// Set up process 2
 	config := &pipeline.ProcessAdaptiveConfig{
-		StatsInterval: 50 * time.Millisecond,
-		StatsWindow:   2,
-		ScaleInterval: time.Second,
+		SamplingInterval: 50 * time.Millisecond,
+		SamplingWindow:   2,
+		ScaleInterval:    time.Second,
 	}
 	p2, err := pipeline.NewProcessAdaptive("process2", 2, 4, config, pipeline.NewSimpleProcessWorker(
 		func(ctx context.Context, id string, item interface{}, emit func(interface{})) error {
@@ -78,5 +78,5 @@ func main() {
 		fmt.Println(err)
 	}
 
-	fmt.Printf("Stats: %s\n", p.Stats())
+	fmt.Printf("Metrics: %s\n", p.Metrics())
 }
