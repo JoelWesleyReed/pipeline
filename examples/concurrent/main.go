@@ -52,8 +52,6 @@ func main() {
 	}()
 
 	// Start the pipeline and wait until it has completed
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
 	s, err := pipeline.NewSinkConcurrent("sink1", 4, pipeline.NewSimpleSinkWorker(
 		func(ctx context.Context, id string, item interface{}) error {
 			fmt.Printf("%s: %v\n", id, item)
@@ -62,6 +60,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
 	err = p.Run(ctx, s)
 	if err != nil {
 		fmt.Println(err)
