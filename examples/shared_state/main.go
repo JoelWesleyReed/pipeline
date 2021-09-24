@@ -22,9 +22,9 @@ func newProcess1() *process1 {
 
 func (p *process1) Process(ctx context.Context, id string, item interface{}, emit func(interface{})) error {
 	p.Lock()
-	defer p.Unlock()
 	emit(item.(int) * p.multiplier)
 	p.multiplier++
+	p.Unlock()
 	time.Sleep(100 * time.Millisecond)
 	return nil
 }
