@@ -42,7 +42,9 @@ type processAdaptive struct {
 	g              *errgroup.Group
 	doneChan       []chan bool
 	config         *ProcessAdaptiveConfig
-	m              *metrics
+	srcMetrics     *metrics
+	procMetrics    *metrics
+	emitMetrics    *metrics
 	sync.Mutex
 	logger *zap.Logger
 }
@@ -67,7 +69,9 @@ func NewProcessAdaptive(id string, minThreads, maxThreads int, config *ProcessAd
 		dstBufChan:     make(chan interface{}, bufChanSize),
 		doneChan:       make([]chan bool, 0),
 		config:         config,
-		m:              newMetrics(true),
+		srcMetrics:     newMetrics(true),
+		procMetrics:    newMetrics(true),
+		emitMetrics:    newMetrics(true),
 	}, nil
 }
 
@@ -152,6 +156,7 @@ func (p *processAdaptive) scaleUp(ctx context.Context) {
 		p.logger.Debug("process adaptive starting", zap.String("id", tid))
 		defer p.logger.Debug("process adaptive exiting", zap.String("id", tid))
 		for {
+			srcStartTime := time.Now()
 			select {
 			case <-doneChan:
 				doneChan <- true
@@ -162,12 +167,21 @@ func (p *processAdaptive) scaleUp(ctx context.Context) {
 				if !open {
 					return nil
 				}
-				startTime := time.Now()
-				err := p.worker.Process(ctx, tid, item, func(item interface{}) { p.emit(ctx, item) })
+				p.srcMetrics.recordDuration(time.Now().Sub(srcStartTime))
+				procStartTime := time.Now()
+				emitTimeSum := time.Duration(0)
+				err := p.worker.Process(ctx, tid, item, func(item interface{}) {
+					emitStartTime := time.Now()
+					p.emit(ctx, item)
+					emitDuration := time.Now().Sub(emitStartTime)
+					p.emitMetrics.recordDuration(emitDuration)
+					emitTimeSum += emitDuration
+				})
 				if err != nil {
 					return fmt.Errorf("process '%s' error: %v", tid, err)
 				}
-				p.m.recordDuration(time.Now().Sub(startTime))
+				procDuration := time.Now().Sub(procStartTime) - emitTimeSum
+				p.procMetrics.recordDuration(procDuration)
 			}
 		}
 	})
@@ -175,7 +189,11 @@ func (p *processAdaptive) scaleUp(ctx context.Context) {
 }
 
 func (p *processAdaptive) metrics() string {
-	return fmt.Sprintf("%s:%s", p.id, p.m.String())
+	return fmt.Sprintf("{ %s: srcWait:%s proc:%s emitWait%s }",
+		p.id,
+		p.srcMetrics.String(),
+		p.procMetrics.String(),
+		p.emitMetrics.String())
 }
 
 func (p *processAdaptive) emit(ctx context.Context, item interface{}) {

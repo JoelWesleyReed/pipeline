@@ -9,19 +9,23 @@ import (
 )
 
 type processSingle struct {
-	id      string
-	worker  ProcessWorker
-	srcChan chan interface{}
-	dstChan chan interface{}
-	m       *metrics
-	logger  *zap.Logger
+	id          string
+	worker      ProcessWorker
+	srcChan     chan interface{}
+	dstChan     chan interface{}
+	srcMetrics  *metrics
+	procMetrics *metrics
+	emitMetrics *metrics
+	logger      *zap.Logger
 }
 
 func NewProcessSingle(id string, worker ProcessWorker) process {
 	return &processSingle{
-		id:     id,
-		worker: worker,
-		m:      newMetrics(false),
+		id:          id,
+		worker:      worker,
+		srcMetrics:  newMetrics(false),
+		procMetrics: newMetrics(false),
+		emitMetrics: newMetrics(false),
 	}
 }
 
@@ -40,6 +44,7 @@ func (p *processSingle) run(ctx context.Context) error {
 	p.logger.Debug("process single starting", zap.String("id", p.id))
 	defer p.logger.Debug("process single exiting", zap.String("id", p.id))
 	for {
+		srcStartTime := time.Now()
 		select {
 		case <-ctx.Done():
 			return nil
@@ -47,18 +52,31 @@ func (p *processSingle) run(ctx context.Context) error {
 			if !open {
 				return nil
 			}
-			startTime := time.Now()
-			err := p.worker.Process(ctx, p.id, item, func(item interface{}) { p.emit(ctx, item) })
+			p.srcMetrics.recordDuration(time.Now().Sub(srcStartTime))
+			procStartTime := time.Now()
+			emitTimeSum := time.Duration(0)
+			err := p.worker.Process(ctx, p.id, item, func(item interface{}) {
+				emitStartTime := time.Now()
+				p.emit(ctx, item)
+				emitDuration := time.Now().Sub(emitStartTime)
+				p.emitMetrics.recordDuration(emitDuration)
+				emitTimeSum += emitDuration
+			})
 			if err != nil {
 				return fmt.Errorf("process '%s' error: %v", p.id, err)
 			}
-			p.m.recordDuration(time.Now().Sub(startTime))
+			procDuration := time.Now().Sub(procStartTime) - emitTimeSum
+			p.procMetrics.recordDuration(procDuration)
 		}
 	}
 }
 
 func (p *processSingle) metrics() string {
-	return fmt.Sprintf("%s:%s", p.id, p.m.String())
+	return fmt.Sprintf("{ %s: srcWait:%s proc:%s emitWait%s }",
+		p.id,
+		p.srcMetrics.String(),
+		p.procMetrics.String(),
+		p.emitMetrics.String())
 }
 
 func (p *processSingle) emit(ctx context.Context, item interface{}) {

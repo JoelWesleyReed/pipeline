@@ -11,12 +11,13 @@ import (
 )
 
 type sinkConcurrent struct {
-	id      string
-	threads int
-	sink    SinkWorker
-	srcChan chan interface{}
-	m       *metrics
-	logger  *zap.Logger
+	id          string
+	threads     int
+	sink        SinkWorker
+	srcChan     chan interface{}
+	srcMetrics  *metrics
+	sinkMetrics *metrics
+	logger      *zap.Logger
 }
 
 func NewSinkConcurrent(id string, threads int, worker SinkWorker) (sink, error) {
@@ -24,10 +25,11 @@ func NewSinkConcurrent(id string, threads int, worker SinkWorker) (sink, error) 
 		return nil, errors.New("thread setting must be greater than 1")
 	}
 	return &sinkConcurrent{
-		id:      id,
-		threads: threads,
-		sink:    worker,
-		m:       newMetrics(true),
+		id:          id,
+		threads:     threads,
+		sink:        worker,
+		srcMetrics:  newMetrics(true),
+		sinkMetrics: newMetrics(true),
 	}, nil
 }
 
@@ -44,6 +46,7 @@ func (s *sinkConcurrent) run(ctx context.Context) error {
 			s.logger.Debug("sink concurrent starting", zap.String("id", tid))
 			defer s.logger.Debug("sink concurrent exiting", zap.String("id", tid))
 			for {
+				srcStartTime := time.Now()
 				select {
 				case <-gctx.Done():
 					return nil
@@ -51,12 +54,13 @@ func (s *sinkConcurrent) run(ctx context.Context) error {
 					if !open {
 						return nil
 					}
-					startTime := time.Now()
+					s.srcMetrics.recordDuration(time.Now().Sub(srcStartTime))
+					sinkStartTime := time.Now()
 					err := s.sink.Sink(ctx, tid, item)
 					if err != nil {
 						return fmt.Errorf("sink '%s' error: %v", tid, err)
 					}
-					s.m.recordDuration(time.Now().Sub(startTime))
+					s.sinkMetrics.recordDuration(time.Now().Sub(sinkStartTime))
 				}
 			}
 		})
@@ -65,5 +69,8 @@ func (s *sinkConcurrent) run(ctx context.Context) error {
 }
 
 func (s *sinkConcurrent) metrics() string {
-	return fmt.Sprintf("%s:%s", s.id, s.m.String())
+	return fmt.Sprintf("{ %s: srcWait:%s sink:%s }",
+		s.id,
+		s.srcMetrics.String(),
+		s.sinkMetrics.String())
 }
