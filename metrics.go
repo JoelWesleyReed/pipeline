@@ -16,9 +16,10 @@ type metrics struct {
 }
 
 type metricsResult struct {
-	Min string `json:"min"`
-	Avg string `json:"avg"`
-	Max string `json:"max"`
+	Min   string `json:"min"`
+	Avg   string `json:"avg"`
+	Max   string `json:"max"`
+	Count uint64 `json:"count"`
 }
 
 func newMetrics(locking bool) *metrics {
@@ -64,5 +65,5 @@ func (m *metrics) results() *metricsResult {
 	if m.locking {
 		m.Unlock()
 	}
-	return &metricsResult{min.String(), avg.String(), max.String()}
+	return &metricsResult{min.String(), avg.String(), max.String(), m.count}
 }
