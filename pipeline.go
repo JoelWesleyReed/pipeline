@@ -17,7 +17,7 @@ const (
 type processMetrics struct {
 	SrcWait  *metricsResult `json:"source_wait"`
 	Proc     *metricsResult `json:"processing_time"`
-	EmitWait *metricsResult `json:"emit_wait`
+	EmitWait *metricsResult `json:"emit_wait"`
 }
 
 type process interface {
