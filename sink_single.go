@@ -26,6 +26,10 @@ func NewSinkSingle(id string, worker SinkWorker) sink {
 	}
 }
 
+func (s *sinkSingle) getID() string {
+	return s.id
+}
+
 func (s *sinkSingle) setup(srcChan chan interface{}, logger *zap.Logger) {
 	s.srcChan = srcChan
 	s.logger = logger
@@ -54,9 +58,9 @@ func (s *sinkSingle) run(ctx context.Context) error {
 	}
 }
 
-func (s *sinkSingle) metrics() string {
-	return fmt.Sprintf("{ %s: srcWait:%s sink:%s }",
-		s.id,
-		s.srcMetrics.String(),
-		s.sinkMetrics.String())
+func (s *sinkSingle) metrics() *sinkMetrics {
+	return &sinkMetrics{
+		SrcWait: s.srcMetrics.results(),
+		Sink:    s.sinkMetrics.results(),
+	}
 }

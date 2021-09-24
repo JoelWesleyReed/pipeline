@@ -36,6 +36,10 @@ func NewProcessConcurrent(id string, threads int, worker ProcessWorker) (process
 	}, nil
 }
 
+func (p *processConcurrent) getID() string {
+	return p.id
+}
+
 func (p *processConcurrent) setup(srcChan, dstChan chan interface{}, logger *zap.Logger) {
 	p.srcChan = srcChan
 	p.dstChan = dstChan
@@ -85,12 +89,12 @@ func (p *processConcurrent) run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (p *processConcurrent) metrics() string {
-	return fmt.Sprintf("{ %s: srcWait:%s proc:%s emitWait%s }",
-		p.id,
-		p.srcMetrics.String(),
-		p.procMetrics.String(),
-		p.emitMetrics.String())
+func (p *processConcurrent) metrics() *processMetrics {
+	return &processMetrics{
+		SrcWait:  p.srcMetrics.results(),
+		Proc:     p.procMetrics.results(),
+		EmitWait: p.emitMetrics.results(),
+	}
 }
 
 func (p *processConcurrent) emit(ctx context.Context, item interface{}) {

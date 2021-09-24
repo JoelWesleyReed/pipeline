@@ -2,7 +2,7 @@ package pipeline
 
 import (
 	"context"
-	"strings"
+	"encoding/json"
 
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -14,17 +14,30 @@ const (
 	chanSize = 0
 )
 
+type processMetrics struct {
+	SrcWait  *metricsResult `json:"source_wait"`
+	Proc     *metricsResult `json:"processing_time"`
+	EmitWait *metricsResult `json:"emit_wait`
+}
+
 type process interface {
+	getID() string
 	setup(srcChan, dstChan chan interface{}, logger *zap.Logger)
 	getDstChan() chan interface{}
 	run(context.Context) error
-	metrics() string
+	metrics() *processMetrics
+}
+
+type sinkMetrics struct {
+	SrcWait *metricsResult `json:"source_wait"`
+	Sink    *metricsResult `json:"sink_time"`
 }
 
 type sink interface {
+	getID() string
 	setup(srcChan chan interface{}, logger *zap.Logger)
 	run(context.Context) error
-	metrics() string
+	metrics() *sinkMetrics
 }
 
 type Pipeline struct {
@@ -91,13 +104,21 @@ func (p *Pipeline) Submit(item interface{}) error {
 }
 
 func (p *Pipeline) Metrics() string {
-	var buf strings.Builder
-	for _, p := range p.process {
-		buf.WriteString(p.metrics())
-		buf.WriteString("  ")
+	type pipelineMetric struct {
+		Id      string      `json:"id"`
+		Metrics interface{} `json:"metrics"`
 	}
-	buf.WriteString(p.sink.metrics())
-	return buf.String()
+	metrics := make([]*pipelineMetric, 0)
+	for _, proc := range p.process {
+		metrics = append(metrics, &pipelineMetric{proc.getID(), proc.metrics()})
+	}
+	metrics = append(metrics, &pipelineMetric{p.sink.getID(), p.sink.metrics()})
+
+	json, err := json.MarshalIndent(metrics, "", "    ")
+	if err != nil {
+		panic(err)
+	}
+	return string(json)
 }
 
 func (p *Pipeline) Shutdown() error {

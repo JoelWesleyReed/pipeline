@@ -2,11 +2,11 @@ package pipeline
 
 import "context"
 
-type SinkWorkerFunc func(ctx context.Context, id string, item interface{}) error
-
 type SinkWorker interface {
 	Sink(context.Context, string, interface{}) error
 }
+
+type SinkWorkerFunc func(ctx context.Context, id string, item interface{}) error
 
 type SimpleSinkWorker struct {
 	f SinkWorkerFunc

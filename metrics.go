@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"fmt"
 	"sync"
 	"time"
 )
@@ -14,6 +13,12 @@ type metrics struct {
 	count       uint64
 	locking     bool
 	sync.Mutex
+}
+
+type metricsResult struct {
+	Min string `json:"min"`
+	Avg string `json:"avg"`
+	Max string `json:"max"`
 }
 
 func newMetrics(locking bool) *metrics {
@@ -44,19 +49,18 @@ func (m *metrics) recordDuration(d time.Duration) {
 	}
 }
 
-func (m *metrics) String() string {
+func (m *metrics) results() *metricsResult {
 	if m.locking {
 		m.Lock()
 	}
 	min := time.Duration(m.minTime)
-	max := time.Duration(m.maxTime)
 	avg := time.Duration(0)
 	if m.count > 0 {
 		avg = time.Duration(m.sumTime / m.count)
 	}
-	str := fmt.Sprintf("[min: %v max: %v avg: %v]", min, max, avg)
+	max := time.Duration(m.maxTime)
 	if m.locking {
 		m.Unlock()
 	}
-	return str
+	return &metricsResult{min.String(), avg.String(), max.String()}
 }

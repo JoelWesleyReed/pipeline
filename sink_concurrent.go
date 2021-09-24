@@ -33,6 +33,10 @@ func NewSinkConcurrent(id string, threads int, worker SinkWorker) (sink, error) 
 	}, nil
 }
 
+func (s *sinkConcurrent) getID() string {
+	return s.id
+}
+
 func (s *sinkConcurrent) setup(srcChan chan interface{}, logger *zap.Logger) {
 	s.srcChan = srcChan
 	s.logger = logger
@@ -68,9 +72,9 @@ func (s *sinkConcurrent) run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *sinkConcurrent) metrics() string {
-	return fmt.Sprintf("{ %s: srcWait:%s sink:%s }",
-		s.id,
-		s.srcMetrics.String(),
-		s.sinkMetrics.String())
+func (s *sinkConcurrent) metrics() *sinkMetrics {
+	return &sinkMetrics{
+		SrcWait: s.srcMetrics.results(),
+		Sink:    s.sinkMetrics.results(),
+	}
 }

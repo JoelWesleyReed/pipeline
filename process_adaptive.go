@@ -75,6 +75,10 @@ func NewProcessAdaptive(id string, minThreads, maxThreads int, config *ProcessAd
 	}, nil
 }
 
+func (p *processAdaptive) getID() string {
+	return p.id
+}
+
 func (p *processAdaptive) setup(srcChan, dstChan chan interface{}, logger *zap.Logger) {
 	p.srcChan = srcChan
 	p.dstChan = dstChan
@@ -188,12 +192,12 @@ func (p *processAdaptive) scaleUp(ctx context.Context) {
 	p.doneChan = append(p.doneChan, doneChan)
 }
 
-func (p *processAdaptive) metrics() string {
-	return fmt.Sprintf("{ %s: srcWait:%s proc:%s emitWait%s }",
-		p.id,
-		p.srcMetrics.String(),
-		p.procMetrics.String(),
-		p.emitMetrics.String())
+func (p *processAdaptive) metrics() *processMetrics {
+	return &processMetrics{
+		SrcWait:  p.srcMetrics.results(),
+		Proc:     p.procMetrics.results(),
+		EmitWait: p.emitMetrics.results(),
+	}
 }
 
 func (p *processAdaptive) emit(ctx context.Context, item interface{}) {

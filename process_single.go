@@ -29,6 +29,10 @@ func NewProcessSingle(id string, worker ProcessWorker) process {
 	}
 }
 
+func (p *processSingle) getID() string {
+	return p.id
+}
+
 func (p *processSingle) setup(srcChan, dstChan chan interface{}, logger *zap.Logger) {
 	p.srcChan = srcChan
 	p.dstChan = dstChan
@@ -71,12 +75,12 @@ func (p *processSingle) run(ctx context.Context) error {
 	}
 }
 
-func (p *processSingle) metrics() string {
-	return fmt.Sprintf("{ %s: srcWait:%s proc:%s emitWait%s }",
-		p.id,
-		p.srcMetrics.String(),
-		p.procMetrics.String(),
-		p.emitMetrics.String())
+func (p *processSingle) metrics() *processMetrics {
+	return &processMetrics{
+		SrcWait:  p.srcMetrics.results(),
+		Proc:     p.procMetrics.results(),
+		EmitWait: p.emitMetrics.results(),
+	}
 }
 
 func (p *processSingle) emit(ctx context.Context, item interface{}) {

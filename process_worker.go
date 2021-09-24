@@ -2,11 +2,11 @@ package pipeline
 
 import "context"
 
-type ProcessWorkerFunc func(ctx context.Context, id string, item interface{}, emit func(interface{})) error
-
 type ProcessWorker interface {
 	Process(context.Context, string, interface{}, func(interface{})) error
 }
+
+type ProcessWorkerFunc func(ctx context.Context, id string, item interface{}, emit func(interface{})) error
 
 type SimpleProcessWorker struct {
 	f ProcessWorkerFunc
