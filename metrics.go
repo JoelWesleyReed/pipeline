@@ -22,7 +22,9 @@ type metricsResult struct {
 }
 
 func newMetrics(locking bool) *metrics {
-	return &metrics{}
+	return &metrics{
+		locking: locking,
+	}
 }
 
 func (m *metrics) recordDuration(d time.Duration) {
