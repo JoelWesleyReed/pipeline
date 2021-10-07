@@ -98,8 +98,12 @@ func (p *Pipeline) Run(ctx context.Context, s sink) error {
 	return nil
 }
 
-func (p *Pipeline) Submit(item interface{}) error {
-	p.srcChan <- item
+func (p *Pipeline) Submit(ctx context.Context, item interface{}) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case p.srcChan <- item:
+	}
 	return nil
 }
 
@@ -112,8 +116,9 @@ func (p *Pipeline) Metrics() string {
 	for _, proc := range p.process {
 		metrics = append(metrics, &pipelineMetric{proc.getID(), proc.metrics()})
 	}
-	metrics = append(metrics, &pipelineMetric{p.sink.getID(), p.sink.metrics()})
-
+	if p.sink != nil {
+		metrics = append(metrics, &pipelineMetric{p.sink.getID(), p.sink.metrics()})
+	}
 	json, err := json.MarshalIndent(metrics, "", "    ")
 	if err != nil {
 		panic(err)

@@ -48,19 +48,21 @@ func main() {
 	}
 	p.Add(p3)
 
+	// Create the context
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	// Start go func to send data into pipeline and then shutdown
 	go func() {
 		defer p.Shutdown()
 		for i := 1; i <= 10; i++ {
-			if err := p.Submit(i); err != nil {
+			if err := p.Submit(ctx, i); err != nil {
 				panic(err)
 			}
 		}
 	}()
 
 	// Start the pipeline and time out the context after 5 seconds
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
 	err = p.Run(ctx, pipeline.NewSinkSingle("sink1", pipeline.NewSimpleSinkWorker(
 		func(ctx context.Context, id string, item interface{}) error {
 			fmt.Printf("%s: %v\n", id, item)

@@ -40,11 +40,15 @@ func main() {
 	}
 	p.Add(p2)
 
+	// Create the context
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
 	// Start go func to send data into pipeline and then shutdown
 	go func() {
 		defer p.Shutdown()
 		for i := 1; i <= 50; i++ {
-			if err := p.Submit(i); err != nil {
+			if err := p.Submit(ctx, i); err != nil {
 				panic(err)
 			}
 		}
@@ -59,8 +63,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
 	err = p.Run(ctx, s)
 	if err != nil {
 		fmt.Println(err)
